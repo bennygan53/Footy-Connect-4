@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Footy Connect 4</title>
+
+<style>
+body{
+  font-family:Arial,sans-serif;
+  background:#0f172a;
+  color:white;
+  text-align:center;
+  padding:20px;
+}
+h1{font-size:48px;letter-spacing:3px;margin-bottom:10px}
+
+.controls{margin-bottom:15px}
+.controls button,label{
+  margin:4px;
+  padding:8px 14px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  background:#334155;
+  color:white;
+  font-weight:bold;
+}
+
+#turn{margin-bottom:10px;font-size:18px}
+
+.board-wrapper{
+  display:grid;
+  grid-template-columns:repeat(8,120px);
+  grid-template-rows:repeat(8,100px);
+  gap:8px;
+  justify-content:center;
+}
+
+.square{
+  background:#1e293b;
+  border-radius:15px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:6px;
+}
+
+.square.category{
+  background:white;
+  color:#0f172a;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.category img{width:60px;height:60px}
+
+.cell{background:#334155;cursor:pointer;position:relative}
+.cell::before{
+  content:"";
+  width:65px;height:65px;
+  background:#0f172a;
+  border-radius:50%;
+  position:absolute;
+}
+.cell.filled::before{background:var(--disc)}
+
+body.mobile .board-wrapper{grid-template-columns:repeat(8,1fr)}
+body.mobile .square{aspect-ratio:1/1;font-size:12px}
+body.mobile .category img{width:45px;height:45px}
+body.mobile .cell::before{width:60%;height:60%}
+</style>
+</head>
+
+<body>
+
+<h1>FOOTY CONNECT 4</h1>
+
+<div class="controls">
+  <button onclick="newGame()">New Game</button>
+  <button onclick="randomiseCategories()">Randomise</button>
+  <button onclick="undoMove()">Undo</button>
+  <button onclick="toggleMobile()">Mobile View</button>
+  <button onclick="toggleFullScreen()">Full Screen</button>
+  <label>
+    <input type="checkbox" id="teamsOnly" onchange="randomiseCategories()"> Teams Only
+  </label>
+</div>
+
+<div id="turn">Player 1's Turn</div>
+<div id="board" class="board-wrapper"></div>
+
+<script>
+const logoCategories=["Adelaide","Brisbane","Carlton","Collingwood","Essendon","Fremantle","Geelong","GoldCoast","GWS","Hawthorn","Melbourne","NorthMelbourne","PortAdelaide","Richmond","StKilda","Sydney","WestCoast","WesternBulldogs"];
+
+const textCategories=[ "Brownlow Medalist","Coleman Winner","<50 Games","200+ Games","300+ Games","All-Australian","5+ All-Australians","Premiership Player","2+ Premierships","Father-Son Pick","Rising Star Nominee","100+ Supercoach Season","110+ Supercoach Season","Best & Fairest Winner","Height <170cm","Height >205cm","Played for 2 Clubs","Played for 3+ Clubs","Indigenous","International","Top 10 Draft Pick","Top 5 Draft Pick","Rookie Draft Pick","Jumper 1–9","Jumper 10–19","Jumper 20–29","Jumper 30–39","Jumper 40+","Brother Played AFL","From WA","From SA","From NSW","From QLD"];
+
+const ROWS=7,COLS=7;
+let topCats=[], leftCats=[];
+let grid,cellEls,history=[],currentPlayer=1,gameOver=false;
+const board=document.getElementById("board");
+
+function shuffle(a){return a.sort(()=>Math.random()-0.5);}
+
+function getPool(){
+  return document.getElementById("teamsOnly").checked
+    ? logoCategories.map(v=>({type:"logo",value:v}))
+    : [...logoCategories.map(v=>({type:"logo",value:v})),...textCategories.map(v=>({type:"text",value:v}))];
+}
+
+/* 🔒 UNIQUE ROW/COLUMN PICK */
+function randomiseCategories(){
+  const pool=shuffle(getPool());
+  topCats = pool.slice(0,7);
+  leftCats = pool.slice(7,14); // guaranteed different
+  buildBoard();
+}
+
+function buildBoard(){
+  board.innerHTML="";
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  cellEls=[];
+  gameOver=false;
+  currentPlayer=1;
+  history=[];
+  updateTurn();
+
+  board.appendChild(makeSquare(""));
+  topCats.forEach((c,i)=>board.appendChild(makeCategory(c,i,true)));
+
+  for(let r=0;r<ROWS;r++){
+    board.appendChild(makeCategory(leftCats[r],r,false));
+    cellEls[r]=[];
+    for(let c=0;c<COLS;c++){
+      const cell=makeCell(c);
+      board.appendChild(cell);
+      cellEls[r][c]=cell;
+    }
+  }
+}
+
+function makeSquare(t){const d=document.createElement("div");d.className="square";d.textContent=t;return d;}
+
+function makeCategory(cat,index,isTop){
+  const d=document.createElement("div");
+  d.className="square category";
+  renderCat(d,cat);
+  d.onclick=()=>cycleCategory(index,isTop);
+  return d;
+}
+
+function renderCat(d,cat){
+  d.innerHTML="";
+  if(cat.type==="logo"){
+    const i=document.createElement("img");
+    i.src=`logos/${cat.value}.svg`;
+    d.appendChild(i);
+  } else d.textContent=cat.value;
+}
+
+/* keep uniqueness when cycling */
+function cycleCategory(i,isTop){
+  const pool=getPool();
+  const list=isTop?topCats:leftCats;
+  const other=isTop?leftCats:topCats;
+  let idx=pool.findIndex(p=>p.value===list[i].value);
+  do{idx=(idx+1)%pool.length}
+  while(list.some((c,ci)=>ci!==i && c.value===pool[idx].value) || other.some(c=>c.value===pool[idx].value));
+  list[i]=pool[idx];
+  buildBoard();
+}
+
+function makeCell(c){
+  const d=document.createElement("div");
+  d.className="square cell";
+  d.onclick=()=>dropDisc(c);
+  return d;
+}
+
+function dropDisc(c){
+  if(gameOver)return;
+  for(let r=ROWS-1;r>=0;r--){
+    if(grid[r][c]===0){
+      grid[r][c]=currentPlayer;
+      cellEls[r][c].style.setProperty("--disc",currentPlayer===1?"#ef4444":"#facc15");
+      cellEls[r][c].classList.add("filled");
+      history.push({r,c});
+      if(checkWin(r,c)){alert(`Player ${currentPlayer} wins!`);gameOver=true;}
+      else{currentPlayer=currentPlayer===1?2:1;updateTurn();}
+      return;
+    }
+  }
+}
+
+function undoMove(){
+  const last=history.pop();
+  if(!last)return;
+  grid[last.r][last.c]=0;
+  cellEls[last.r][last.c].classList.remove("filled");
+  currentPlayer=currentPlayer===1?2:1;
+  updateTurn();
+}
+
+function checkWin(r,c){
+  return count(r,c,1,0)>=4||count(r,c,0,1)>=4||count(r,c,1,1)>=4||count(r,c,1,-1)>=4;
+}
+
+function count(r,c,dr,dc){return 1+walk(r,c,dr,dc)+walk(r,c,-dr,-dc);}
+function walk(r,c,dr,dc){
+  let p=grid[r][c],i=0,rr=r+dr,cc=c+dc;
+  while(rr>=0&&rr<ROWS&&cc>=0&&cc<COLS&&grid[rr][cc]===p){i++;rr+=dr;cc+=dc}
+  return i;
+}
+
+function updateTurn(){document.getElementById("turn").textContent=`Player ${currentPlayer}'s Turn`;}
+function newGame(){randomiseCategories();}
+function toggleMobile(){document.body.classList.toggle("mobile");}
+function toggleFullScreen(){
+  if(!document.fullscreenElement)document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+}
+
+randomiseCategories();
+</script>
+</body>
+</html>
